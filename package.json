@@ -1,0 +1,17 @@
+{
+  "name": "albion-stats",
+  "version": "0.1.0",
+  "description": "Albion Online market statistics — prices, history, flips and craft (data from the Albion Online Data Project).",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "sync:items": "node src/items.js",
+    "sync:prices": "node src/sync.js --once"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Albion Market — История цен</title>
+<link rel="stylesheet" href="/css/app.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <div class="page-head">
+    <div class="kicker">Динамика рынка</div>
+    <h1>История цен</h1>
+    <p>Средняя цена продажи по городам во времени.</p>
+  </div>
+
+  <div class="search" id="search" style="margin-bottom:18px">
+    <input id="q" type="text" placeholder="Найти предмет для графика…" autocomplete="off" />
+    <div class="ac" id="ac"></div>
+  </div>
+
+  <div class="row" style="margin-bottom:16px">
+    <div class="field"><label>Период</label>
+      <select id="days"><option value="7" selected>7 дней</option><option value="14">14 дней</option><option value="30">30 дней</option></select>
+    </div>
+    <div class="field"><label>Шаг</label>
+      <select id="scale"><option value="6" selected>6 ч</option><option value="24">сутки</option><option value="1">1 ч</option></select>
+    </div>
+  </div>
+
+  <div id="result"></div>
+</div>
+<script type="module" src="/js/history.js"></script>
+</body>
+</html>
