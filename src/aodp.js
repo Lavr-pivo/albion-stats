@@ -4,19 +4,35 @@ import {
   SERVERS, AODP_MIN_INTERVAL_MS, MAX_ITEMS_PER_REQUEST,
 } from './config.js';
 
-// --- serial, throttled request queue ---------------------------------------
-let chain = Promise.resolve();
+// --- priority request queue (rate-limited, single in-flight) ---------------
+// On-demand requests (priority 'high') jump ahead of background sync ('low'),
+// so a user never waits behind the whole sync backlog. One request in flight,
+// spaced by AODP_MIN_INTERVAL_MS to respect the API's 300-req/5-min cap.
+const queues = { high: [], low: [] };
 let lastAt = 0;
+let pumping = false;
 
-function throttled(fn) {
-  const run = async () => {
-    const wait = Math.max(0, lastAt + AODP_MIN_INTERVAL_MS - Date.now());
-    if (wait) await new Promise((r) => setTimeout(r, wait));
-    lastAt = Date.now();
-    return fn();
-  };
-  chain = chain.then(run, run);
-  return chain;
+function enqueue(fn, priority = 'high') {
+  return new Promise((resolve, reject) => {
+    queues[priority === 'low' ? 'low' : 'high'].push({ fn, resolve, reject });
+    pump();
+  });
+}
+
+async function pump() {
+  if (pumping) return;
+  pumping = true;
+  try {
+    while (queues.high.length || queues.low.length) {
+      const wait = Math.max(0, lastAt + AODP_MIN_INTERVAL_MS - Date.now());
+      if (wait) await new Promise((r) => setTimeout(r, wait));
+      const task = queues.high.shift() || queues.low.shift();
+      lastAt = Date.now();
+      try { task.resolve(await task.fn()); } catch (e) { task.reject(e); }
+    }
+  } finally {
+    pumping = false;
+  }
 }
 
 function chunk(arr, size) {
@@ -48,7 +64,7 @@ function baseUrl(server) {
  * Returns normalized rows: {item_id, city, quality, server,
  *   sell_price_min, sell_price_max, buy_price_min, buy_price_max, observed_at}.
  */
-export async function fetchPrices(server, itemIds, cities, qualities) {
+export async function fetchPrices(server, itemIds, cities, qualities, priority = 'high') {
   const base = baseUrl(server);
   const loc = cities.map(encodeURIComponent).join(',');
   const qual = qualities.join(',');
@@ -57,11 +73,11 @@ export async function fetchPrices(server, itemIds, cities, qualities) {
   for (const ids of chunk([...new Set(itemIds)], MAX_ITEMS_PER_REQUEST)) {
     const url = `${base}/api/v2/stats/prices/${ids.map(encodeURIComponent).join(',')}`
       + `?locations=${loc}&qualities=${qual}`;
-    const rows = await throttled(async () => {
+    const rows = await enqueue(async () => {
       const res = await fetch(url, { headers: { 'User-Agent': 'albion-stats/0.1' } });
       if (!res.ok) throw new Error(`AODP prices HTTP ${res.status} for ${ids.length} items`);
       return res.json();
-    });
+    }, priority);
     for (const r of rows) {
       all.push({
         item_id: r.item_id,
@@ -83,7 +99,7 @@ export async function fetchPrices(server, itemIds, cities, qualities) {
  * Fetch price history for one or more items.
  * timeScale: 1 | 6 | 24 (hours per data point).
  */
-export async function fetchHistory(server, itemIds, cities, qualities, days = 7, timeScale = 6) {
+export async function fetchHistory(server, itemIds, cities, qualities, days = 7, timeScale = 6, priority = 'high') {
   const base = baseUrl(server);
   const loc = cities.map(encodeURIComponent).join(',');
   const qual = qualities.join(',');
@@ -98,9 +114,9 @@ export async function fetchHistory(server, itemIds, cities, qualities, days = 7,
     + `?date=${fmt(start)}&end_date=${fmt(end)}`
     + `&locations=${loc}&qualities=${qual}&time-scale=${timeScale}`;
 
-  return throttled(async () => {
+  return enqueue(async () => {
     const res = await fetch(url, { headers: { 'User-Agent': 'albion-stats/0.1' } });
     if (!res.ok) throw new Error(`AODP history HTTP ${res.status}`);
     return res.json();
-  });
+  }, priority);
 }

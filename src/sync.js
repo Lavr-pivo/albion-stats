@@ -43,7 +43,7 @@ async function runPass(label, ids) {
     for (const server of SYNC_SERVERS) {
       const t0 = Date.now();
       try {
-        const rows = await fetchPrices(server, ids, CITIES, DEFAULT_QUALITIES);
+        const rows = await fetchPrices(server, ids, CITIES, DEFAULT_QUALITIES, 'low');
         if (rows.length) upsertPrices(rows.map((r) => ({ ...r, fetched_at: Date.now() })));
         console.log(`sync(${label}) ${server}: ${rows.length} rows / ${ids.length} items in ${((Date.now() - t0) / 1000) | 0}s`);
       } catch (e) {
