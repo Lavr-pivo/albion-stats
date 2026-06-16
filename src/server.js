@@ -8,12 +8,32 @@ import { router as prices } from './routes/prices.js';
 import { router as history } from './routes/history.js';
 import { router as flips } from './routes/flips.js';
 import { router as craft } from './routes/craft.js';
-import { startSync } from './sync.js';
+import { startSync, getSyncStatus } from './sync.js';
 import { loadItems } from './items.js';
 
 const app = express();
 
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
+
+// Diagnostics: shows whether the background sync is actually updating data.
+app.get('/api/status', (_req, res) => {
+  const counts = db.prepare('SELECT COUNT(*) AS prices FROM prices').get();
+  const newest = db.prepare(
+    'SELECT MAX(fetched_at) AS lastFetched, MAX(observed_at) AS newestObserved FROM prices',
+  ).get();
+  const perServer = db.prepare(
+    'SELECT server, COUNT(*) AS rows, MAX(fetched_at) AS lastFetched FROM prices GROUP BY server',
+  ).all();
+  res.json({
+    now: Date.now(),
+    items: db.prepare('SELECT COUNT(*) AS c FROM items').get().c,
+    priceRows: counts.prices,
+    lastFetchedMsAgo: newest.lastFetched ? Date.now() - newest.lastFetched : null,
+    newestObserved: newest.newestObserved,
+    perServer,
+    sync: getSyncStatus(),
+  });
+});
 
 // Expose static config the frontend needs.
 app.get('/api/meta', (_req, res) => {

@@ -14,6 +14,11 @@ const SYNC_SERVERS = (process.env.SYNC_SERVERS || 'europe,west,east').split(',')
 const SYNC_LIMIT = process.env.SYNC_LIMIT ? Number(process.env.SYNC_LIMIT) : null;
 
 let busy = false; // prevent overlapping passes from piling up on the queue
+const lastResults = {}; // `${label}:${server}` -> { at, rows, items, durationMs, error }
+
+export function getSyncStatus() {
+  return { busy, servers: SYNC_SERVERS, lastResults };
+}
 
 function fullItemIds() {
   const q = SYNC_LIMIT
@@ -45,8 +50,11 @@ async function runPass(label, ids) {
       try {
         const rows = await fetchPrices(server, ids, CITIES, DEFAULT_QUALITIES, 'low');
         if (rows.length) upsertPrices(rows.map((r) => ({ ...r, fetched_at: Date.now() })));
-        console.log(`sync(${label}) ${server}: ${rows.length} rows / ${ids.length} items in ${((Date.now() - t0) / 1000) | 0}s`);
+        const durationMs = Date.now() - t0;
+        lastResults[`${label}:${server}`] = { at: new Date().toISOString(), rows: rows.length, items: ids.length, durationMs, error: null };
+        console.log(`sync(${label}) ${server}: ${rows.length} rows / ${ids.length} items in ${(durationMs / 1000) | 0}s`);
       } catch (e) {
+        lastResults[`${label}:${server}`] = { at: new Date().toISOString(), rows: 0, items: ids.length, durationMs: Date.now() - t0, error: e.message };
         console.warn(`sync(${label}) ${server} failed:`, e.message);
       }
     }
